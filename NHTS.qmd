@@ -1,0 +1,359 @@
+---
+title: "NHTS"
+editor_options: 
+  chunk_output_type: console
+---
+
+-   **library**
+
+```{r}
+library(dplyr)
+library(tidyverse)
+library(tidyr)
+library(tictoc)
+library(caret)
+library(parallelPlot)
+library(earth)
+library(vip)
+library(purrr)
+library(dplyr)
+library(broom)
+library(esquisse)
+library(stargazer)
+```
+
+-   **data**
+
+```{r}
+
+# install.packages("dplyr")
+library(dplyr)
+
+per_data <- read.csv("trippub.csv")
+
+
+work_trips <- per_data %>% filter(TRPTRANS == "2")
+
+work_trips_sorted <- work_trips %>% arrange(R_AGE)
+
+write.csv(work_trips_sorted, "bicycle_PER.csv", row.names = FALSE)
+```
+
+```{r}
+bicycle_PER <- read.csv("bicycle_PER.csv")
+
+hhpub <- read.csv("hhpub.csv")
+
+selected_houseids <- bicycle_PER$HOUSEID
+
+matching_rows <- hhpub[hhpub$HOUSEID %in% selected_houseids, ]
+
+write.csv(matching_rows, "hhpub_matched_houseids_data.csv", row.names = FALSE)
+```
+
+```{r}
+bicycle_PER <- read.csv("bicycle_PER.csv")
+
+vehpub <- read.csv("vehpub.csv")
+
+selected_houseids <- bicycle_PER$HOUSEID
+
+matching_rows <- vehpub[vehpub$HOUSEID %in% selected_houseids, ]
+
+write.csv(matching_rows, "matched_houseids_vehpub_data.csv", row.names = FALSE)
+```
+
+```{r}
+
+bicycle_PER <- read.csv("bicycle_PER.csv")
+
+perpub <- read.csv("perpub.csv")
+
+selected_houseids <- bicycle_PER$HOUSEID
+
+matching_rows <- perpub[perpub$HOUSEID %in% selected_houseids, ]
+
+write.csv(matching_rows, "matched_houseids_perpub_data.csv", row.names = FALSE)
+```
+
+```{r}
+
+#install.packages("dplyr")
+library(dplyr)
+
+data_perpub <- read.csv("matched_houseids_perpub_data.csv")
+
+data_vehpub <- read.csv("matched_houseids_vehpub_data.csv")
+
+data_hhpub <- read.csv("hhpub_matched_houseids_data.csv")
+
+data_work_trips <- read.csv("bicycle_PER.csv")
+
+data_merged <- data_perpub %>%
+  full_join(data_vehpub, by = "HOUSEID") %>%
+  full_join(data_hhpub, by = "HOUSEID") %>%
+  full_join(data_work_trips, by = "HOUSEID")
+ 
+write.csv(data_merged, "merged_data.csv", row.names = FALSE)
+```
+
+-   **model 1 (Random Forest)**
+
+```{r}
+library(randomForest)
+
+data_merged <- read.csv("C:/Users/omid rayaneh/Desktop/NHTS/merged_data.csv")
+
+selected_columns <- c(
+  "TRVLCMIN", "WTTRDFIN", "TIMETOWK", "TDCASEID", "TRPMILES"
+)
+
+selected_data <- data_merged %>%
+  select(all_of(selected_columns))
+
+missing_values <- sum(is.na(selected_data))
+cat("Missing values in the selected data:", missing_values, "\n")
+
+selected_data <- na.omit(selected_data)
+
+set.seed(123)  # Set seed for reproducibility
+train_index <- createDataPartition(selected_data$TRVLCMIN, p = 0.8, list = FALSE)
+train_data <- selected_data[train_index, ]
+test_data <- selected_data[-train_index, ]
+
+model <- randomForest(TRVLCMIN ~ ., data = train_data)
+
+predictions <- predict(model, newdata = test_data)
+
+rmse <- sqrt(mean((predictions - test_data$TRVLCMIN)^2))
+cat("Root Mean Squared Error:", rmse, "\n")
+
+rsquared <- 1 - (sum((test_data$TRVLCMIN - predictions)^2) / sum((test_data$TRVLCMIN - mean(test_data$TRVLCMIN))^2))
+cat("R-squared:", rsquared, "\n")
+library(ggplot2)
+
+plot_data <- data.frame(
+  Actual = test_data$TRVLCMIN,
+  Predicted = predictions
+)
+
+ggplot(data = plot_data, aes(x = Actual, y = Predicted)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "red") +
+  labs(title = "Actual vs. Predicted Travel Time",
+       x = "Actual Travel Time",
+       y = "Predicted Travel Time") +
+  theme_minimal()
+
+#Root Mean Squared Error: 10.6512 
+#R-squared: 0.8607878 
+
+```
+
+```{r}
+ggplot(data = plot_data, aes(x = "", y = Actual)) +
+  geom_boxplot() +
+  labs(title = "Distribution of Travel Time",
+       x = "",
+       y = "Travel Time") +
+  theme_minimal()
+```
+
+-   **model 2 (Random Forest)**
+
+```{r}
+library(randomForest)
+
+data_merged <- read.csv("C:/Users/omid rayaneh/Desktop/NHTS/merged_data.csv")
+
+selected_columns <- c(
+  "TRVLCMIN", "WTTRDFIN", "TIMETOWK", "TRPMILES"
+)
+
+selected_data <- data_merged %>%
+  select(all_of(selected_columns))
+
+missing_values <- sum(is.na(selected_data))
+cat("Missing values in the selected data:", missing_values, "\n")
+
+selected_data <- na.omit(selected_data)
+
+set.seed(123)  # Set seed for reproducibility
+train_index <- createDataPartition(selected_data$TRVLCMIN, p = 0.8, list = FALSE)
+train_data <- selected_data[train_index, ]
+test_data <- selected_data[-train_index, ]
+
+model <- randomForest(TRVLCMIN ~ ., data = train_data)
+
+predictions <- predict(model, newdata = test_data)
+
+rmse <- sqrt(mean((predictions - test_data$TRVLCMIN)^2))
+cat("Root Mean Squared Error:", rmse, "\n")
+
+rsquared <- 1 - (sum((test_data$TRVLCMIN - predictions)^2) / sum((test_data$TRVLCMIN - mean(test_data$TRVLCMIN))^2))
+
+cat("R-squared:", rsquared, "\n")
+library(ggplot2)
+
+plot_data <- data.frame(
+  Actual = test_data$TRVLCMIN,
+  Predicted = predictions
+)
+
+ggplot(data = plot_data, aes(x = Actual, y = Predicted)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1, linetype = "dashed", color = "red") +
+  labs(title = "Actual vs. Predicted Travel Time",
+       x = "Actual Travel Time",
+       y = "Predicted Travel Time") +
+  theme_minimal()
+#Root Mean Squared Error: 13.26418 
+#R-squared: 0.7841058 
+library(ggplot2)
+
+residuals <- test_data$TRVLCMIN - predictions
+
+residual_plot <- ggplot() +
+  geom_point(aes(x = predictions, y = residuals), color = "blue") +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+  xlab("Predicted Values") +
+  ylab("Residuals") +
+  ggtitle("Residual Plot")
+
+print(residual_plot)
+```
+
+-   **model 3 (SVR)**
+
+```{r}
+library(e1071)
+
+data_merged <- read.csv("C:/Users/omid rayaneh/Desktop/NHTS/merged_data.csv")
+
+selected_columns <- c(
+  "TRVLCMIN", "WTTRDFIN", "TIMETOWK", "TDCASEID", "TRPMILES"
+)
+
+selected_data <- data_merged %>%
+  select(all_of(selected_columns))
+
+selected_data <- na.omit(selected_data)
+
+set.seed(123)
+train_index <- createDataPartition(selected_data$TRVLCMIN, p = 0.8, list = FALSE)
+train_data <- selected_data[train_index, ]
+test_data <- selected_data[-train_index, ]
+
+model <- svm(TRVLCMIN ~ ., data = train_data)
+
+predictions <- predict(model, newdata = test_data)
+
+rmse <- sqrt(mean((predictions - test_data$TRVLCMIN)^2))
+cat("Root Mean Squared Error:", rmse, "\n")
+
+rsquared <- 1 - (sum((test_data$TRVLCMIN - predictions)^2) / sum((test_data$TRVLCMIN - mean(test_data$TRVLCMIN))^2))
+cat("R-squared:", rsquared, "\n")
+#Root Mean Squared Error: 21.48896 
+#R-squared: 0.433355 
+library(ggplot2)
+library(kableExtra)
+
+plot_data <- data.frame(
+  Actual = test_data$TRVLCMIN,
+  Predicted = predictions
+)
+
+plot <- ggplot(data = plot_data, aes(x = Actual, y = Predicted)) +
+  geom_point(color = "blue", size = 1) +
+  geom_abline(intercept = 0, slope = 1, color = "red", linetype = "dashed") +
+  labs(title = "Actual vs. Predicted Travel Time",
+       x = "Actual",
+       y = "Predicted") +
+  theme_minimal()
+
+table_data <- data.frame(
+  Actual = test_data$TRVLCMIN,
+  Predicted = predictions
+)
+
+table <- kbl(table_data, caption = "Actual vs. Predicted Travel Time") %>%
+  kable_classic(full_width = F) %>%
+  add_header_above(c(" ", "Predicted" = 1, " ")) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+
+plot
+```
+
+# tuning
+
+```{r}
+# Load required libraries
+library(mlr3)
+library(paradox)
+library(mlr3learners)
+library(mlr3pipelines)
+library(mlr3viz)
+library(mlr3tuning)
+library(mlr3data)
+library(mlr3filters)
+library(mlr3tuning)
+library(patchwork)
+library(parallel)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+
+data_merged <- read.csv("C:/Users/omid rayaneh/Desktop/NHTS/merged_data.csv")
+selected_data <- data_merged
+
+selected_columns <- c("TRVLCMIN", "WTTRDFIN", "HOUSEID", "TIMETOWK", "CNTTDHH", "TRPMILES") 
+
+selected_data <- selected_data %>% 
+  select(all_of(selected_columns))
+
+missing_values <- sum(is.na(selected_data))
+cat("Missing values in the selected data:", missing_values, "\n")
+
+selected_data <- na.omit(selected_data)
+
+task <- as_task_classif(selected_data, target = "TRVLCMIN")
+
+tnr_grid_search <- tnr("random_search")
+lrn_ranger <- lrn("classif.ranger",
+                  num.trees = to_tune(300, 700),
+                  alpha = to_tune(0.25, 0.75),
+                  seed = 123,
+                  save.memory = TRUE
+)
+
+msr_acc <- msr("classif.acc")
+
+terminator <- trm("run_time", secs = 300)
+
+
+
+at <- auto_tuner(
+  tuner = tnr_grid_search,
+  learner = as_learner(ppl("robustify") %>>% lrn_ranger),
+  resampling = rsmp("holdout", ratio = 0.8),
+  measure = msr_acc,
+  terminator = terminator
+)
+
+resampling <- rsmp("holdout", ratio = 0.8)
+splits <- resampling$instantiate(task)
+
+cluster <- makeCluster(detectCores() - 1)
+doParallel::registerDoParallel(cluster)
+
+at$train(task, row_ids = splits$train)
+
+
+
+stopCluster(cluster)
+
+print(at$tuning_result)
+
+best_learner <- at$learner
+best_learner$train(task, row_ids = splits$train)
+```
